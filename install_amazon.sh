@@ -638,6 +638,12 @@ setup_bash() {
   if [ -e "$HOME/.bashrc" ] && [ ! grep -q ".bashrc" ~/.bash_profile ]; then
     append_new_line_if_not_exist "\nif [ -f .bashrc ]; then source .bashrc; fi" $PROFILE "source .bashrc"
   fi
+
+  # link alias folder and apply them in .bash_profile
+  if [ ! -e "$HOME/.bash_alias.d" ]; then
+    ln -s $SCRIPT_DIR/bash_alias.d $HOME/.bash_alias.d
+  fi
+  append_new_line_if_not_exist "\nfor alias_file in \$HOME/.bash_alias.d/*; do source \$alias_file; done" $PROFILE "\$HOME/.bash_alias.d"
 }
 
 # Main.
