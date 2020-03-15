@@ -74,7 +74,6 @@ do
   read
 done
 
-
 # check git installation
 if ! which git &>/dev/null
 then
@@ -156,3 +155,10 @@ do
     read
   fi
 done
+
+# install iterm theme.
+git clone https://github.com/dracula/iterm.git /tmp/iterm_dracula
+echo "Please import Dracula theme to iTerm2 through: iTerm → Preferences → Profiles → Colors → Color presets → Import."
+echo "The theme file is in /tmp/iterm_dracula"
+/bin/echo "press ENTER when ready to continue."
+read
