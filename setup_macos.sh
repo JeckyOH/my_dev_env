@@ -20,7 +20,9 @@ if [ -n "$SUDO_USER" ]; then
 fi
 
 if [ "${SHELL##*/}" = "zsh" ]; then
-  chsh -s /bin/bash
+    #chsh -s /bin/bash
+    touch $HOME/.zshrc
+    touch $HOME/.zshenv
 fi
 
 if [ "${SHELL##*/}" = "bash" ]; then
@@ -30,8 +32,6 @@ if [ "${SHELL##*/}" = "bash" ]; then
     touch $HOME/.bash_profile 
   fi
   chown $USER ~/.bash_profile
-else
-  echo "Only bash are supported currently."
 fi
 
 # generate the private keys if necessary

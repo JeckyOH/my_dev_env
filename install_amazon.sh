@@ -9,8 +9,6 @@ LATEST_PROTO=3.6.1
 LATEST_PYTHON37=3.7.6
 
 VIRTUALENV_ROOT=${VIRTUALENV_ROOT:-$HOME/virtualenv}
-
-# Virtualenv environment to activate (passed in from jenkins build_common.sh)
 VE_ENV=${VENV:-v1}
 
 # By defualt just install python packages.
@@ -48,13 +46,11 @@ else
 fi
 
 if [ "$MACOS" = true ] && [ "$SHELL" = "/bin/zsh" ]; then
-  PROFILE=~/.zprofile
+    PROFILE=~/.zshrc
+    RC=~/.zshenv
 else
-  if [ ! -e ~/.bash_profile -a -e ~/.profile ]; then
-    PROFILE=~/.profile
-  else
     PROFILE=~/.bash_profile
-  fi
+    RC=~/.bashrc
 fi
 
 brew_update() {
@@ -167,15 +163,6 @@ append_new_line_if_not_exist () {
   fi
 }
 
-source_profile () {
-    if [ "$INJENKINS" = true ]; then
-	  echo "Not re-sourcing the profile in jenkins."
-	  echo "Make sure you update scripts/jenkins/build_common.sh to have your environment."
-    else
-      . $PROFILE
-    fi
-}
-
 machine_install () {
   # Run this stanza when doing per-machine setup.  Otherwise, the script will only perform
   # per-user setup.
@@ -249,28 +236,23 @@ update_limits () {
 
 install_python () {
   # Get the latest version of system wide pythong
-  # Make sure you run bootstrap_machine to get latest apt-get and software-properties-common
   if [ "$DO_MACHINE_INSTALL" = false ]; then
     return
   fi
-  if [ "$MACOS" = true ]; then
-    echo "On OSX we hope that Apple updated python for us."
-    install_package pyenv
-    pyenv install --skip-existing $LATEST_PYTHON37
-    pyenv global $LATEST_PYTHON37
-    pyenv version
-  else
-    install_package software-properties-common # for ppa
-    sudo add-apt-repository ppa:deadsnakes/ppa
-    sudo apt-get update -y
-    sudo apt-get install -y -q --reinstall python3.7
-    sudo update-alternatives --install /usr/bin/python python /usr/bin/python3.7 10
-    # This fixes some issue with apt not liking the new python3.7 install and complaining about not
-    # having apt_pkg module.
-    sudo ln -s /usr/lib/python3/dist-packages/apt_pkg.cpython-35m-x86_64-linux-gnu.so /usr/lib/python3/dist-packages/apt_pkg.cpython-37m-x86_64-linux-gnu.so
-    sudo apt-get install -y -q python3-setuptools
-    curl -sS https://bootstrap.pypa.io/get-pip.py | sudo python
+
+  if [ ! -e "$HOME/.pyenv" ]; then
+    git clone https://github.com/pyenv/pyenv.git $HOME/.pyenv
   fi
+  append_new_line_if_not_exist "\nexport PYENV_ROOT=$HOME/.pyenv" $RC "export PYENV_ROOT="
+  append_new_line_if_not_exist 'export PATH=$PYENV_ROOT/bin:$PATH' $RC 'export PATH=$PYENV_ROOT'
+  append_new_line_if_not_exist '\nif command -v pyenv 1>/dev/null 2>&1; then\n  eval "$(pyenv init -)"\nfi' $PROFILE 'if command -v pyenv 1>/dev/null 2>&1; then\n  eval "$(pyenv init -)"\nfi'
+  
+  . $RC
+  
+  eval "$(pyenv init -)"
+  pyenv install --skip-existing $LATEST_PYTHON37
+  pyenv global $LATEST_PYTHON37
+  pyenv global
 }
 
 install_emacs () {
@@ -331,22 +313,6 @@ ENDOFFILE
 
 
 setup_basic_python () {
-  DEFAULT_PYTHON_VERSION=3.7.6
-  # Setup python stuff for the machine.
-  if [ "$DO_MACHINE_INSTALL" = false ]; then
-    return
-  fi
-
-  git clone https://github.com/pyenv/pyenv.git $HOME/.pyenv
-  append_new_line_if_not_exist "export PYENV_ROOT=$HOME/.pyenv" $PROFILE "export PYENV_ROOT="
-  append_new_line_if_not_exist 'export PATH=$PYENV_ROOT/bin:$PATH' $PROFILE 'export PATH=$PYENV_ROOT'
-  append_new_line_if_not_exist 'if command -v pyenv 1>/dev/null 2>&1; then\n  eval "$(pyenv init -)"\nfi' $PROFILE 'if command -v pyenv 1>/dev/null 2>&1; then\n  eval "$(pyenv init -)"\nfi'
-  . $PROFILE
-  eval "$(pyenv init -)"
-  pyenv install --skip-existing $DEFAULT_PYTHON_VERSION
-  pyenv global $DEFAULT_PYTHON_VERSION
-  pyenv global
-
   if [ "$MACOS" != true ]; then
     echo "Installing pip..."
     wget https://bootstrap.pypa.io/get-pip.py -O /tmp/get-pip.py
@@ -380,37 +346,18 @@ setup_virtualenv () {
     mkdir -p $VIRTUALENV_ROOT
     cd $VIRTUALENV_ROOT
     virtualenv --python=python3.7 $VE_ENV
-    # Add this to the .bashrc as well so we always start in this env.
-    # NOTE: bashrc is only read by interactive shells, so in particular fab
-    # won't see this unless you use a fab.prefix.
-    if ( ! grep -q '$VIRTUALENV_ROOT/$VE_ENV/bin/activate' $PROFILE ); then
-      ASCRON=${ASCRON:-false}
-      if [ $ASCRON = "true" ]; then
-	# Running in jenkins
-	echo "Not adding $VIRTUALENV_ROOT/$VE_ENV since ASCRON=true (jenkins)"
-      else
-        append_new_line_if_not_exist "\n\n. $VIRTUALENV_ROOT/$VE_ENV/bin/activate" $PROFILE
-      fi
-    fi
   else
     echo "$VIRTUALENV_ROOT/$VE_ENV directory exists so not setting up virtualenv"
   fi
-  echo "Activating virtualenv: $VIRTUALENV_ROOT/$VE_ENV/bin/activate
-Note that this only happens within the function script it's called in unfortuantely.
-"
+
+  append_new_line_if_not_exist "\n\n. $VIRTUALENV_ROOT/$VE_ENV/bin/activate" $PROFILE "$VIRTUALENV_ROOT/$VE_ENV/bin/activate"
+  
   echo ". $VIRTUALENV_ROOT/$VE_ENV/bin/activate"
   . $VIRTUALENV_ROOT/$VE_ENV/bin/activate
 
   # Now make sure the pip within the virtualenv is the latest one.
   echo "python -m pip install --upgrade pip"
   python -m pip install --upgrade pip
-}
-
-activate_virtualenv () {
-  echo "Activating virtualenv: $VIRTUALENV_ROOT/$VE_ENV/bin/activate
-Note that this only happens within the function script it's called in unfortuantely.
-"
-  . $VIRTUALENV_ROOT/$VE_ENV/bin/activate
 }
 
 setup_docker () {
@@ -559,12 +506,11 @@ install_go() {
 
 setup_go() {
   # Make sure these are always setup for you account.
-  append_new_line_if_not_exist "export GOPATH=\$HOME/go" $PROFILE "export GOPATH="
-  append_new_line_if_not_exist "export PATH=\$PATH:\$GOPATH/bin" $PROFILE "export PATH=.*GOPATH"
-  append_new_line_if_not_exist "export GO15VENDOREXPERIMENT=1" $PROFILE
-  append_new_line_if_not_exist "export AWS_REGION=\"us-east-1\"" $PROFILE
+  append_new_line_if_not_exist "\nexport GOPATH=\$HOME/work/go" $RC "export GOPATH="
+  append_new_line_if_not_exist "export PATH=\$PATH:\$GOPATH/bin" $RC "export PATH=.*GOPATH"
+  append_new_line_if_not_exist "export GO15VENDOREXPERIMENT=1" $RC "GO15VENDOREXPERIMENT="
 
-  source_profile
+  . $RC
 }
 
 setup_jq() {
@@ -605,52 +551,77 @@ setup_emacs(){
   fi
 }
 
-setup_bash() {
-  if [ ! -e "$HOME/.bash_it" ]; then
-    /bin/echo "Checking out bash-it GitHub repo..."
-    git_clone Bash-it/bash-it.git $HOME/.bash_it
+setup_sh() {
+  if [ ! -e "$PROFILE" ]; then
+    touch $PROFILE
   fi
-  $HOME/.bash_it/install.sh 
-
-  # use bobby_v2 as theme, which is a custom theme.
-  cp -rf $SCRIPT_DIR/bash_it/custom/* $HOME/.bash_it/custom/ 
-  sed -i -e 's/BASH_IT_THEME=.*/BASH_IT_THEME="bobby_v2"/' $HOME/.bash_profile
-
-  append_new_line_if_not_exist "# Just show minimum git info, speed up prompts" $PROFILE "export SCM_GIT_SHOW_MINIMAL_INFO="
-  append_new_line_if_not_exist "export SCM_GIT_SHOW_MINIMAL_INFO=true" $PROFILE "export SCM_GIT_SHOW_MINIMAL_INFO="
-
-  append_new_line_if_not_exist "# Disable clock char, very ugly!" $PROFILE "export THEME_SHOW_CLOCK_CHAR="
-  append_new_line_if_not_exist "export THEME_SHOW_CLOCK_CHAR=false" $PROFILE "export THEME_SHOW_CLOCK_CHAR="
-  
-  # for Mac
-  osascript -e 'tell app "Terminal"
-    do script "bash-it enable alias emacs git osx tmux && \
-               bash-it enable completion git git_flow brew kubectl tmux && \
-               bash-it enable plugin autojump battery git "
-  end tell'
-  
-  # [TODO] for ubuntu, please start another window to enable bash-it.
-
-  # remove bash deprecation warning.
-  append_new_line_if_not_exist "\nexport BASH_SILENCE_DEPRECATION_WARNING=1" $PROFILE "export BASH_SILENCE_DEPRECATION_WARNING="
-
-  # source .bashrc in .bash_profile
-  if [ -e "$HOME/.bashrc" ] && [ ! grep -q ".bashrc" ~/.bash_profile ]; then
-    append_new_line_if_not_exist "\nif [ -f .bashrc ]; then source .bashrc; fi" $PROFILE "source .bashrc"
+  if [ ! -e "$RC" ]; then
+    touch $RC
   fi
+
+  if [ "${SHELL##*/}" = "zsh" ]; then
+      if [ ! -e "$HOME/.oh-my-zsh" ]; then
+          sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+      fi
+
+      # install powerline fonts
+      rm -rf /tmp/fonts && \
+      git clone https://github.com/powerline/fonts.git --depth=1 /tmp/fonts && \
+      /tmp/fonts/install.sh && \
+      rm -rf /tmp/fonts
+
+      # apply agnoster theme, which uses powerline font.
+      sed -i -e 's/ZSH_THEME=.*/ZSH_THEME="agnoster"/' $PROFILE
+
+      # enable plugins
+      sed -i -e 's/plugins=.*/plugins=(git battery)/' $PROFILE
+  elif [ "${SHELL##*/}" = "bash" ]; then
+      if [ ! -e "$HOME/.bash_it" ]; then
+          /bin/echo "Checking out bash-it GitHub repo..."
+          git_clone Bash-it/bash-it.git $HOME/.bash_it
+      fi
+      $HOME/.bash_it/install.sh 
+
+      # use bobby_v2 as theme, which is a custom theme.
+      cp -rf $SCRIPT_DIR/bash_it/custom/* $HOME/.bash_it/custom/ 
+      sed -i -e 's/BASH_IT_THEME=.*/BASH_IT_THEME="bobby_v2"/' $PROFILE
+
+      append_new_line_if_not_exist "# Just show minimum git info, speed up prompts" $PROFILE "export SCM_GIT_SHOW_MINIMAL_INFO="
+      append_new_line_if_not_exist "export SCM_GIT_SHOW_MINIMAL_INFO=true" $PROFILE "export SCM_GIT_SHOW_MINIMAL_INFO="
+
+      append_new_line_if_not_exist "# Disable clock char, very ugly!" $PROFILE "export THEME_SHOW_CLOCK_CHAR="
+      append_new_line_if_not_exist "export THEME_SHOW_CLOCK_CHAR=false" $PROFILE "export THEME_SHOW_CLOCK_CHAR="
+      
+      # for Mac
+      osascript -e 'tell app "Terminal"
+        do script "bash-it enable alias emacs git osx tmux && \
+                   bash-it enable completion git git_flow brew kubectl tmux && \
+                   bash-it enable plugin autojump battery git "
+        end tell'
+      
+      # [TODO] for ubuntu, please start another window to enable bash-it.
+
+      # remove bash deprecation warning.
+      append_new_line_if_not_exist "\nexport BASH_SILENCE_DEPRECATION_WARNING=1" $RC "export BASH_SILENCE_DEPRECATION_WARNING="
+
+      # source .bashrc in .bash_profile
+      append_new_line_if_not_exist "\nif [ -f .bashrc ]; then source .bashrc; fi" ~/.bash_profile "source .bashrc"
+  fi
+  
 
   # link alias folder and apply them in .bash_profile
   if [ ! -e "$HOME/.bash_alias.d" ]; then
     ln -s $SCRIPT_DIR/bash_alias.d $HOME/.bash_alias.d
   fi
-  append_new_line_if_not_exist "\nfor alias_file in \$HOME/.bash_alias.d/*; do source \$alias_file; done" $PROFILE "\$HOME/.bash_alias.d"
+  append_new_line_if_not_exist "\nfor alias_file in \$HOME/.bash_alias.d/*.sh; do source \$alias_file; done" $RC "\$HOME/.bash_alias.d"
 }
 
 # Main.
 if [ $# -eq 0 ]; then
-  setup_bash
+  setup_sh
   install_emacs && setup_emacs
   install_go && setup_go
+  install_python && setup_basic_python && setup_virtualenv
 else
   for func in "$@"
   do
