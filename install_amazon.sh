@@ -245,7 +245,7 @@ install_python () {
   fi
   append_new_line_if_not_exist "\nexport PYENV_ROOT=$HOME/.pyenv" $RC "export PYENV_ROOT="
   append_new_line_if_not_exist 'export PATH=$PYENV_ROOT/bin:$PATH' $RC 'export PATH=$PYENV_ROOT'
-  append_new_line_if_not_exist '\nif command -v pyenv 1>/dev/null 2>&1; then\n  eval "$(pyenv init -)"\nfi' $PROFILE 'if command -v pyenv 1>/dev/null 2>&1; then\n  eval "$(pyenv init -)"\nfi'
+  append_new_line_if_not_exist '\nif command -v pyenv 1>/dev/null 2>&1; then\n  eval "$(pyenv init -)"\nfi' $PROFILE 'eval "$(pyenv init -)"'
   
   . $RC
   
